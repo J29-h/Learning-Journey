@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5D82E7AE2EA0D4A6001C15BB /* Learning Journey */ = {
+		5D0D9B962EA60790000E10C6 /* Learning Journey */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Learning Journey";
 			sourceTree = "<group>";
@@ -75,7 +75,7 @@
 		5D82E7A32EA0D4A6001C15BB = {
 			isa = PBXGroup;
 			children = (
-				5D82E7AE2EA0D4A6001C15BB /* Learning Journey */,
+				5D0D9B962EA60790000E10C6 /* Learning Journey */,
 				5D82E7BC2EA0D4A7001C15BB /* Learning JourneyTests */,
 				5D82E7C62EA0D4A7001C15BB /* Learning JourneyUITests */,
 				5D82E7AD2EA0D4A6001C15BB /* Products */,
@@ -108,7 +108,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				5D82E7AE2EA0D4A6001C15BB /* Learning Journey */,
+				5D0D9B962EA60790000E10C6 /* Learning Journey */,
 			);
 			name = "Learning Journey";
 			packageProductDependencies = (
@@ -195,6 +195,9 @@
 			);
 			mainGroup = 5D82E7A32EA0D4A6001C15BB;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5D0D9B9F2EA62754000E10C6 /* XCRemoteSwiftPackageReference "CalendarKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5D82E7AD2EA0D4A6001C15BB /* Products */;
 			projectDirPath = "";
@@ -582,6 +585,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5D0D9B9F2EA62754000E10C6 /* XCRemoteSwiftPackageReference "CalendarKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/richardtop/CalendarKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.11;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = 5D82E7A42EA0D4A6001C15BB /* Project object */;
 }

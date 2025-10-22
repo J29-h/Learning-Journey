@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Workspace
    version = "1.0">
+   <Group
+      location = "group:New Group"
+      name = "New Group">
+      <FileRef
+         location = "container:../ModelView/ViewModel.swift">
+      </FileRef>
+      <FileRef
+         location = "container:../Model/Model.swift">
+      </FileRef>
+   </Group>
    <FileRef
       location = "self:">
    </FileRef>

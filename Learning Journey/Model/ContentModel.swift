@@ -13,3 +13,7 @@ struct LearningGoal {
     var days: Int
 }
 
+struct ActivityDate {
+    var date: Date
+}
+
