@@ -293,18 +293,18 @@ final class StreakTracker: ObservableObject {
             print("Loaded total freezes: \(self.totalFreezes) for period \(savedGoal.period)")
         } else {
             self.totalFreezes = 2
-             print("Could not load goal period, defaulting total freezes to \(self.totalFreezes)")
+            print("Could not load goal period, defaulting total freezes to \(self.totalFreezes)")
         }
         objectWillChange.send()
     }
     
     /// Resets all streak data.
     func resetAllData() {
-            self.streakData = .empty()
-            loadTotalFreezesFromGoal()
-            saveData()
-            print("Reset all data and reloaded total freezes: \(totalFreezes)")
-        }
+        self.streakData = .empty()
+        loadTotalFreezesFromGoal()
+        saveData()
+        print("Reset all data and reloaded total freezes: \(totalFreezes)")
+    }
     
 }
 
@@ -325,229 +325,250 @@ enum DateStatus {
 }
 
 final class MainLogic: ObservableObject {
-
+    
     @Published var selectedDate: Date = Date()
     @Published var currentWeek: [Date] = []
     @Published var showPicker = false
-    @Published var selectedMonthIndex: Int = 0 {
-        didSet { updateMonthFromPicker() }
-    }
-    @Published var selectedYear: Int = Calendar.current.component(.year, from: Date()) {
-        didSet { updateMonthFromPicker() }
-    }
-
+    @Published var selectedMonthIndex: Int = 0
+    @Published var selectedYear: Int = 0
+    
+    
+    private let calendar: Calendar = {
+        var cal = Calendar.current
+        cal.locale = Locale.current
+        cal.timeZone = TimeZone.current
+        return cal
+    }()
+    
     private(set) var streakTracker = StreakTracker()
-
-    // --- State Properties (Reflecting StreakData) ---
+    
     @Published var daysLearned: Int = 0
     @Published var daysFreezed: Int = 0
     @Published var totalFreezesAllowed: Int = 0
     @Published var isActionTakenToday: Bool = false
     @Published var hasLoggedToday: Bool = false
     @Published var hasFrozenToday: Bool = false
-
-    // --- Goal Target ---
+    
     private var goalTargetDays: Int = 0
-
-    // --- Navigation Flag ---
-    @Published var navigateToSetup = false // Signals the App struct to switch root view
-
-    // --- Date Formatting ---
-    private let calendar = Calendar.current
+    @Published var navigateToSetup = false
+    
+//    private var calendar = Calendar.current
     private let monthFormatter = DateFormatter()
     private let yearFormatter = DateFormatter()
     private let weekdayFormatter = DateFormatter()
     private let dayFormatter = DateFormatter()
-
-    // --- Picker Data ---
+    
     let availableMonths = Calendar.current.monthSymbols
     let availableYears = Array(2000...(Calendar.current.component(.year, from: Date()) + 5))
-
-    // --- Overlay State ---
-    @Published var showOverlay = false // Controls the "Well Done!" overlay
-
+    @Published var showOverlay = false
+    
+    private var cancellables = Set<AnyCancellable>()
+    
     // --- Initialization ---
     init() {
-        monthFormatter.dateFormat = "MMMM"
+                let now = Date()
+        
+        monthFormatter.dateFormat = "LLLL"
         yearFormatter.dateFormat = "yyyy"
-        weekdayFormatter.dateFormat = "EEE"
-        dayFormatter.dateFormat = "d"
+        weekdayFormatter.dateFormat = "EEE"  // or "EEEE" for full names
+        weekdayFormatter.locale = Locale.current
+        monthFormatter.locale = Locale.current
+        yearFormatter.locale = Locale.current
+                
+                let initialMonthIndex = calendar.component(.month, from: now) - 1
+                let initialYear = calendar.component(.year, from: now)
+                
+                _selectedMonthIndex = Published(initialValue: initialMonthIndex)
+                _selectedYear = Published(initialValue: initialYear)
+                
+                updateCurrentWeek()
+                
+                Publishers.CombineLatest($selectedMonthIndex, $selectedYear)
+                    .dropFirst()
+                    .sink { [weak self] monthIndex, year in
+                        self?.updateDateFromPickers(monthIndex: monthIndex, year: year)
+                    }
+                    .store(in: &cancellables)
+            }
 
-        // FIX 1: Snap selectedDate to the start of the current day
-        selectedDate = calendar.startOfDay(for: Date())
-
-        loadGoalTarget()
-        setupBindings()
-        updateCurrentWeek(basedOn: selectedDate)
-        syncPickerToSelectedDate()
-        updateStateFromTracker()
+    // --- Observe system day changes ---
+    private func observeMidnightChange() {
+        // Checks every minute if day changed
+        Timer.publish(every: 60, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                let today = self.calendar.startOfDay(for: Date())
+                if !self.calendar.isDate(self.selectedDate, inSameDayAs: today) {
+                    self.selectedDate = today
+                    self.updateCurrentWeek(basedOn: today)
+                    self.syncPickerToSelectedDate()
+                }
+            }
+            .store(in: &cancellables)
     }
-
+    
     // --- Combine Pipeline ---
     private func setupBindings() {
-        streakTracker.objectWillChange.sink { [weak self] _ in
-            self?.updateStateFromTracker()
-        }.store(in: &cancellables)
+        streakTracker.objectWillChange
+            .sink { [weak self] _ in self?.updateStateFromTracker() }
+            .store(in: &cancellables)
     }
-    private var cancellables = Set<AnyCancellable>()
-
-
     // --- Load Goal Target ---
     private func loadGoalTarget() {
         let goalDataStore = GoalDataStore()
         if let savedGoal = goalDataStore.loadGoal() {
-             self.goalTargetDays = savedGoal.days
-             print("Loaded goal target days: \(self.goalTargetDays)")
+            goalTargetDays = savedGoal.days
         } else {
-             self.goalTargetDays = 2
-             print("Goal not loaded; TEMPORARILY setting target to \(self.goalTargetDays)")
+            goalTargetDays = 2
         }
     }
-
-
-    // --- State Update ---
+    
     func updateStateFromTracker() {
         daysLearned = streakTracker.streakData.streak
         daysFreezed = streakTracker.streakData.freezesUsed
         totalFreezesAllowed = streakTracker.totalFreezes
-
+        
         let todayStatus = streakTracker.getStatus(for: Date())
         isActionTakenToday = (todayStatus == .learned || todayStatus == .freezed)
         hasLoggedToday = (todayStatus == .learned)
         hasFrozenToday = (todayStatus == .freezed)
-
-        // Check if goal is met
-        if goalTargetDays > 0 && daysLearned >= goalTargetDays {
-             showOverlay = true
-             print("Goal met! Streak: \(daysLearned), Target: \(goalTargetDays)")
-        }
     }
-
-
-    // --- Calendar Logic ---
+    
     var currentMonthName: String { monthFormatter.string(from: selectedDate) }
     var currentYearString: String { yearFormatter.string(from: selectedDate) }
-
+    
     func updateCurrentWeek(basedOn date: Date) { currentWeek = generateWeek(for: date) }
-
-    // --- RESTORED EXPLICIT DATE MATH LOGIC ---
+    
     func generateWeek(for date: Date) -> [Date] {
-        // Find the day of the week (1=Sunday, 7=Saturday based on settings)
-        let weekday = calendar.component(.weekday, from: date)
-        
-        // Calculate days to subtract to get to the first day of the week
-        let daysToSubtract = (weekday - calendar.firstWeekday + 7) % 7
-        
-        guard let startOfWeek = calendar.date(byAdding: .day, value: -daysToSubtract, to: date) else {
-            return []
+        let today = calendar.startOfDay(for: date)
+        if let weekInterval = calendar.dateInterval(of: .weekOfYear, for: today) {
+            let startOfWeek = weekInterval.start
+            return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
         }
-        
-        // Generate the 7 days starting from the calculated startOfWeek
-        return (0..<7).compactMap { offset in
-            calendar.date(byAdding: .day, value: offset, to: startOfWeek)
-        }
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
     }
-    // --- END RESTORED EXPLICIT DATE MATH LOGIC ---
-
+    
     func weekdayString(from date: Date) -> String { weekdayFormatter.string(from: date) }
     func dayNumber(from date: Date) -> Int { calendar.component(.day, from: date) }
+    func select(date: Date) { selectedDate = date }
     
-    // Selects a date and updates the displayed week
-    func select(date: Date) {
-        selectedDate = date
-    }
-
-    // --- Picker Logic ---
     func togglePicker() { showPicker.toggle() }
-
-    func updateMonthFromPicker() {
-        guard selectedMonthIndex < availableMonths.count else { return }
-        let month = selectedMonthIndex + 1
-        var components = calendar.dateComponents([.year, .month, .day], from: selectedDate)
-        components.year = selectedYear
-        components.month = month
-        components.day = 1
-        if let newDate = calendar.date(from: components) {
-            selectedDate = newDate
-            updateCurrentWeek(basedOn: newDate)
-        }
-        showPicker = false
+    
+    private func updateDateFromPickers(monthIndex: Int, year: Int) {
+                let currentDay = calendar.component(.day, from: selectedDate)
+                var components = DateComponents(year: year, month: monthIndex + 1)
+                
+                guard let newMonthDate = calendar.date(from: components),
+                      let range = calendar.range(of: .day, in: .month, for: newMonthDate) else {
+                    return
+                }
+                
+                components.day = min(currentDay, range.count)
+                
+                if let newDate = calendar.date(from: components) {
+                    selectedDate = newDate
+                    updateCurrentWeek()
+                }
+            }
+    
+    func updateCurrentWeek() {
+                guard let weekInterval = calendar.dateInterval(of: .weekOfMonth, for: selectedDate) else { return }
+                
+                currentWeek = (0..<7).compactMap {
+                    calendar.date(byAdding: .day, value: $0, to: weekInterval.start)
+                }
+                
+                selectedMonthIndex = calendar.component(.month, from: selectedDate) - 1
+                selectedYear = calendar.component(.year, from: selectedDate)
+            }
+            
+    
+    func nextWeek() {
+                guard let next = calendar.date(byAdding: .day, value: 7, to: selectedDate) else { return }
+                selectedDate = next
+                updateCurrentWeek()
+            }
+            
+    func previousWeek() {
+        guard let prev = calendar.date(byAdding: .day, value: -7, to: selectedDate) else { return }
+        selectedDate = prev
+        updateCurrentWeek()
     }
+    
 
+            
+    func isSelected(_ date: Date) -> Bool {
+        Calendar.current.isDate(date, inSameDayAs: selectedDate)
+    }
+    
+    
+    func dayNumber(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter.string(from: date)
+    }
+    
     func syncPickerToSelectedDate() {
         selectedYear = calendar.component(.year, from: selectedDate)
         selectedMonthIndex = calendar.component(.month, from: selectedDate) - 1
     }
-
-    // --- Week Navigation ---
-    func previousWeek() {
-        if let newDate = calendar.date(byAdding: .weekOfYear, value: -1, to: selectedDate) {
-            selectedDate = newDate
-            updateCurrentWeek(basedOn: newDate)
-        }
-    }
-
-    func nextWeek() {
-        if let newDate = calendar.date(byAdding: .weekOfYear, value: 1, to: selectedDate) {
-            selectedDate = newDate
-            updateCurrentWeek(basedOn: newDate)
-        }
-    }
-
-    // --- Button Actions ---
+    
+    
+    // --- Buttons ---
     func logLearned() {
-         if streakTracker.logLearned(for: Date()) { print("Logged learned for TODAY") }
-         else { print("Could not log learned for TODAY") }
-    }
+        if streakTracker.logLearned(for: Date()) { print("Logged learned for TODAY") }
+        else { print("Could not log learned for TODAY") } }
+    
     func logFreeze() {
-         if streakTracker.logFreeze(for: Date()) { print("Logged freeze for TODAY") }
-         else { print("Could not log freeze for TODAY") }
+        if streakTracker.logFreeze(for: Date()) { print("Logged freeze for TODAY") }
+        else { print("Could not log freeze for TODAY") }
     }
-
-     // --- Button State Logic ---
-     var logButtonText: String {
-          let todayStatus = streakTracker.getStatus(for: Date())
-          if todayStatus == .freezed { return "Day\nFreezed" }
-          else if todayStatus == .learned { return "Learned\nToday" }
-          else { return "Log as \nLearned" }
-     }
-     var freezeButtonText: String { streakTracker.getStatus(for: Date()) == .freezed ? "Freezed" : "Log as Freezed" }
-
-     func logButtonForegroundColor(scheme: ColorScheme) -> Color {
-         let todayStatus = streakTracker.getStatus(for: Date())
-         if todayStatus == .freezed { return Color("Freeze") }
-         else if todayStatus == .learned { return Color("AccentColor") }
-         else { return Color("MainText") }
-     }
-     func logButtonFillColor(scheme: ColorScheme) -> Color {
-          let todayStatus = streakTracker.getStatus(for: Date())
-         if todayStatus == .freezed {
-             return scheme == .dark ? Color.black : Color(red: 27/255, green: 63/255, blue: 74/255)
-         } else if todayStatus == .learned {
-             return Color("Icon")
-         } else {
-             return scheme == .dark ? Color(red: 0.70, green: 0.25, blue: 0.0) : Color("AccentColor")
-         }
-     }
-     func freezeButtonFillColor(scheme: ColorScheme) -> Color {
-         streakTracker.getStatus(for: Date()) == .freezed ? Color("Freezed") : Color("Freeze")
-     }
-     var canFreeze: Bool { streakTracker.freezesRemaining > 0 && streakTracker.getStatus(for: Date()) == .normal }
-     var isFreezeButtonDisabled: Bool { !canFreeze }
-     var canLogAction: Bool { streakTracker.getStatus(for: Date()) == .normal }
-
-      // --- Text Labels ---
-     var daysLearnedLabel: String { daysLearned == 1 ? "Day Learned" : "Days Learned" }
-     var daysFreezedLabel: String { daysFreezed == 1 ? "Day Freezed" : "Days Freezed" }
-
+    
+    // --- Button State Logic ---
+    var logButtonText: String {
+        let todayStatus = streakTracker.getStatus(for: Date())
+        if todayStatus == .freezed { return "Day\nFreezed" }
+        else if todayStatus == .learned { return "Learned\nToday" }
+        else { return "Log as \nLearned" }
+    }
+    var freezeButtonText: String { streakTracker.getStatus(for: Date()) == .freezed ? "Freezed" : "Log as Freezed" }
+    
+    func logButtonForegroundColor(scheme: ColorScheme) -> Color {
+        let todayStatus = streakTracker.getStatus(for: Date())
+        if todayStatus == .freezed { return Color("Freeze") }
+        else if todayStatus == .learned { return Color("AccentColor") }
+        else { return Color("MainText") }
+    }
+    func logButtonFillColor(scheme: ColorScheme) -> Color {
+        let todayStatus = streakTracker.getStatus(for: Date())
+        if todayStatus == .freezed {
+            return scheme == .dark ? Color.black : Color(red: 27/255, green: 63/255, blue: 74/255)
+        } else if todayStatus == .learned {
+            return Color("Icon")
+        } else {
+            return scheme == .dark ? Color(red: 0.70, green: 0.25, blue: 0.0) : Color("AccentColor")
+        }
+    }
+    func freezeButtonFillColor(scheme: ColorScheme) -> Color {
+        streakTracker.getStatus(for: Date()) == .freezed ? Color("Freezed") : Color("Freeze")
+    }
+    var canFreeze: Bool { streakTracker.freezesRemaining > 0 && streakTracker.getStatus(for: Date()) == .normal }
+    var isFreezeButtonDisabled: Bool { !canFreeze }
+    var canLogAction: Bool { streakTracker.getStatus(for: Date()) == .normal }
+    
+    // --- Text Labels ---
+    var daysLearnedLabel: String { daysLearned == 1 ? "Day Learned" : "Days Learned" }
+    var daysFreezedLabel: String { daysFreezed == 1 ? "Day Freezed" : "Days Freezed" }
+    
     var freezesRemainingText: String {
         let remaining = streakTracker.freezesRemaining
         let total = totalFreezesAllowed
-        return "\(max(0, remaining)) Freezes left"
+        return "\(max(0, remaining)) Freezes remains"
     }
-
+    
     // --- Well Done Overlay Actions ---
-
+    
     @MainActor
     func resetGoalAndOpenSetup() {
         // 1. Reset all persistent streak data (streak, freezes used, history)
@@ -555,41 +576,40 @@ final class MainLogic: ObservableObject {
         
         // 2. Clear the goal data from UserDefaults entirely
         // GoalDataStore().clearGoalData()
-
+        
         // 3. Signal app to navigate to ContentView
         navigateToSetup = true
         showOverlay = false
     }
-
+    
     func continueSameGoal() {
         // 1. Reset only streak count and freezes used (Goal and limit remain)
         // streakTracker.resetStreakOnly()
-
+        
         // 2. Hide overlay
         showOverlay = false
     }
-
-
-     // --- Calendar Day Styling ---
-     func getDayStatus(for date: Date) -> StreakData.DayStatus { streakTracker.getStatus(for: date) }
-     func dayFillColor(for date: Date, scheme: ColorScheme = .light) -> Color {
-         let status = getDayStatus(for: date)
-         if isSelected(date) { return Color("AccentColor") }
-         switch status {
-             case .learned: return Color("Icon")
-             case .freezed: return Color("Freeze")
-             case .normal: return Color.clear
-         }
-     }
-      func dayForegroundColor(for date: Date, scheme: ColorScheme = .light) -> Color {
-          let status = getDayStatus(for: date)
-          if isSelected(date) { return .white }
-          switch status {
-              case .learned, .freezed: return .white
-              case .normal: return Color("MainText")
-          }
-      }
-     func isSelected(_ date: Date) -> Bool { calendar.isDate(date, inSameDayAs: selectedDate) }
+    
+    
+    // --- Calendar Day Styling ---
+    func getDayStatus(for date: Date) -> StreakData.DayStatus { streakTracker.getStatus(for: date) }
+    func dayFillColor(for date: Date, scheme: ColorScheme = .light) -> Color {
+        let status = getDayStatus(for: date)
+        if isSelected(date) { return Color("AccentColor") }
+        switch status {
+        case .learned: return Color("Icon")
+        case .freezed: return Color("Freeze")
+        case .normal: return Color.clear
+        }
+    }
+    func dayForegroundColor(for date: Date, scheme: ColorScheme = .light) -> Color {
+        let status = getDayStatus(for: date)
+        if isSelected(date) { return .white }
+        switch status {
+        case .learned, .freezed: return .white
+        case .normal: return Color("MainText")
+        }
+    }
 }
 
 

@@ -25,6 +25,7 @@ struct MainView: View {
     private var recColor: Color { Color("Rec") }
     private var freezeColor: Color { Color("Freeze") } // Used for day bg
     private var iconColor: Color { Color("Icon") } // Used for learned day bg
+    
 
     var body: some View {
         NavigationStack {
