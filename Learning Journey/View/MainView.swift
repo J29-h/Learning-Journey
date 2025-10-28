@@ -386,14 +386,14 @@ struct WellDoneOverlay: View {
                 // Button 1: Continue Same Goal (Soft Reset)
                 Button("Continue Same Goal") {
                     // --- CHANGED: Calls ViewModel function ---
-//                    viewModel.continueSameGoal()
+                    viewModel.continueSameGoal()
                 }
                 .buttonStyle(OverlayButtonStyle(backgroundColor: Color("AccentColor"))) // Use custom style
 
                 // Button 2: Set New Goal (Hard Reset & Navigation)
                 Button("Set New Learning Goal") {
                     // --- CHANGED: Calls ViewModel function ---
-//                    viewModel.resetGoalAndOpenSetup()
+                    viewModel.resetGoalAndOpenSetup()
                 }
                 .buttonStyle(OverlayButtonStyle(backgroundColor: .clear, foregroundColor: Color("AccentColor"), strokeColor: Color("AccentColor"))) // Use custom style
 

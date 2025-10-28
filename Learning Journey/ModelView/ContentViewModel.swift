@@ -571,23 +571,23 @@ final class MainLogic: ObservableObject {
     
     @MainActor
     func resetGoalAndOpenSetup() {
-        // 1. Reset all persistent streak data (streak, freezes used, history)
-        // streakTracker.resetAllData()
+
         
-        // 2. Clear the goal data from UserDefaults entirely
-        // GoalDataStore().clearGoalData()
+        streakTracker.resetAllData()
+        let goalDataStore = GoalDataStore()
+            
+        goalDataStore.clearGoalData()
         
-        // 3. Signal app to navigate to ContentView
         navigateToSetup = true
         showOverlay = false
+        
+        print("All data cleared — navigating to setup page.")
     }
     
     func continueSameGoal() {
-        // 1. Reset only streak count and freezes used (Goal and limit remain)
-        // streakTracker.resetStreakOnly()
-        
-        // 2. Hide overlay
+        streakTracker.resetAllData()
         showOverlay = false
+        print("Continuing with same goal — streak reset but goal retained.")
     }
     
     
