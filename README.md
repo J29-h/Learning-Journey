@@ -33,5 +33,6 @@ An intermediary that prepares data for the View and handles the View's display l
 
 ## Requirments
 iOS26+
+
 Xcode26+
 
