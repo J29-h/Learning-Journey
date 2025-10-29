@@ -27,7 +27,7 @@ struct PeriodDetail {
 }
 
 let periodDetails: [PeriodSelection: PeriodDetail] = [
-    .week:  PeriodDetail(totalDays: 7,   freezeDays: 2),
+    .week:  PeriodDetail(totalDays: 1,   freezeDays: 2),
     .month: PeriodDetail(totalDays: 30,  freezeDays: 8),
     .year:  PeriodDetail(totalDays: 365, freezeDays: 96)
 ]
